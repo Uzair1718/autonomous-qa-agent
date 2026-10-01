@@ -71,7 +71,7 @@ Generate a single Python file with:
    - IMPORTANT: Never define a fixture named "base_url" — always use the BASE_URL module-level constant directly
    - Do NOT set up tracing in fixtures — put tracing start/stop inside each test function
 
-5. TEST FUNCTIONS section:
+5. ADVERSARIAL COVERAGE:\n   - For each applicable flow, add negative validation, boundary values, duplicate submission, refresh/back/forward, unauthorized/direct URL, and expired-session checks.\n   - Never invent credentials or destructive data; use values supplied in the test-user context.\n   - Treat payment actions as non-destructive unless explicitly configured.\n\n6. TEST FUNCTIONS section:
    - One async test function per flow
    - Name: test_<flow_name_in_snake_case>
    - Docstring: flow description
