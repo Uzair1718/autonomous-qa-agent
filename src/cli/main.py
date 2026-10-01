@@ -77,7 +77,7 @@ async def _full_run(
     from src.reporting.html_reporter import HTMLReporter
     from src.reporting.json_reporter import JSONReporter
 
-    model = os.getenv("QA_MODEL", "gpt-4o-mini")
+    model = os.getenv("QA_MODEL", "qwen3:8b")
     config = AgentConfig(
         url=url,
         max_depth=depth,
@@ -177,8 +177,8 @@ async def _full_run(
         # STEP 6: Flow inference
         task = progress.add_task("[6/13] Inferring user flows with AI...", total=None)
         try:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            from src.llm.ollama import OllamaClient
+            client = OllamaClient()
             inferencer = FlowInferencer(client=client, model=model)
             flows = await inferencer.infer(crawl_result, codegen_script)
             run_data.flows = flows
@@ -191,8 +191,8 @@ async def _full_run(
         # STEP 7: Test generation
         task = progress.add_task("[7/13] Generating test code...", total=None)
         try:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            from src.llm.ollama import OllamaClient
+            client = OllamaClient()
             generator = TestGenerator(client=client, model=model)
             test_suite = await generator.generate(flows, url, run_dir)
             run_data.test_suite = test_suite
@@ -262,8 +262,8 @@ async def _full_run(
         if execution_result and execution_result.failed > 0:
             task = progress.add_task("[11/13] Scoring failure severity...", total=None)
             try:
-                from openai import AsyncOpenAI
-                client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                from src.llm.ollama import OllamaClient
+                client = OllamaClient()
                 scorer = SeverityScorer(client=client, model=model)
                 scored = await scorer.score(
                     execution_result,
