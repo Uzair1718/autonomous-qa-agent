@@ -28,7 +28,7 @@ load_dotenv()
 
 app = typer.Typer(
     name="qa-agent",
-    help="🤖 AutonomousQA Agent — zero-config AI-powered web testing",
+    help="🤖 AutonomousQA Agent — local-LLM autonomous web testing",
     rich_markup_mode="rich",
 )
 console = Console()
@@ -63,6 +63,8 @@ async def _full_run(
     visual_diff: bool,
     interactive: bool,
     log_level: str,
+    srs_path: str = "",
+    pen_path: str = "",
 ) -> None:
     """Full orchestrated agent run."""
     from src.agent.crawler import SiteCrawler
@@ -76,8 +78,13 @@ async def _full_run(
     from src.models import AgentConfig, RunData
     from src.reporting.html_reporter import HTMLReporter
     from src.reporting.json_reporter import JSONReporter
+    from src.reporting.excel_reporter import ExcelReporter
+    from src.reporting.pdf_reporter import PDFReporter
+    from src.qa.planner import QAPlanner
+    from src.qa.design_compare import DesignComparator
+    from src.qa.exploratory import ExploratoryAgent
 
-    model = os.getenv("QA_MODEL", "gpt-4o-mini")
+    model = os.getenv("QA_MODEL", "qwen3:8b")
     config = AgentConfig(
         url=url,
         max_depth=depth,
@@ -93,7 +100,17 @@ async def _full_run(
     )
 
     run_dir = config.reports_dir / config.run_id
+    srs_context = Path(srs_path).read_text(encoding="utf-8") if srs_path else ""
+    design_context = Path(pen_path).read_text(encoding="utf-8") if pen_path else ""
+    users_path = Path(os.getenv("QA_USERS_FILE", "qa-users.json"))
+    users_context = users_path.read_text(encoding="utf-8") if users_path.exists() else ""
+    if users_context:
+        srs_context += "\n\nTEST USERS / ROLES:\n" + users_context[:8000]
     run_dir.mkdir(parents=True, exist_ok=True)
+    if srs_context:
+        (run_dir / "srs_input.md").write_text(srs_context, encoding="utf-8")
+    if design_context:
+        (run_dir / "design_input.pen").write_text(design_context, encoding="utf-8")
 
     run_data = RunData(
         run_id=config.run_id,
@@ -101,6 +118,14 @@ async def _full_run(
         started_at=datetime.now(UTC),
         run_dir=run_dir,
     )
+
+    from src.llm.ollama import OllamaClient, OllamaError
+    llm = OllamaClient()
+    try:
+        await llm.ensure_model(model)
+    except OllamaError as exc:
+        console.print(f"[red]✗ Local LLM unavailable: {exc}[/red]")
+        raise typer.Exit(1) from exc
 
     cli = PlaywrightCLI()
 
@@ -177,10 +202,10 @@ async def _full_run(
         # STEP 6: Flow inference
         task = progress.add_task("[6/13] Inferring user flows with AI...", total=None)
         try:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            from src.llm.ollama import OllamaClient
+            client = OllamaClient()
             inferencer = FlowInferencer(client=client, model=model)
-            flows = await inferencer.infer(crawl_result, codegen_script)
+            flows = await inferencer.infer(crawl_result, codegen_script, srs_context=srs_context, design_context=design_context)
             run_data.flows = flows
             progress.update(task, description=f"[6/13] {len(flows)} user flows inferred")
         except Exception as exc:
@@ -188,17 +213,66 @@ async def _full_run(
             flows = []
         progress.remove_task(task)
 
-        # STEP 7: Test generation
-        task = progress.add_task("[7/13] Generating test code...", total=None)
+        # STEP 7: Adversarial scenario expansion
+        task = progress.add_task("[7/14] Expanding adversarial QA scenarios...", total=None)
         try:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            planner = QAPlanner(client=OllamaClient(), model=model)
+            scenarios = await planner.plan(
+                url,
+                crawl_result.model_dump(mode="json"),
+                srs=srs_context,
+                design=design_context,
+            )
+            (run_dir / "qa_scenarios.json").write_text(
+                json.dumps(scenarios, indent=2, default=str), encoding="utf-8"
+            )
+            progress.update(task, description=f"[7/14] Planned {len(scenarios)} adversarial scenarios")
+        except Exception as exc:
+            console.print(f"[yellow]⚠ Scenario planning failed: {exc}[/yellow]")
+            scenarios = []
+        progress.remove_task(task)
+
+        if scenarios:
+            from src.models import UserFlow, FlowStep
+            existing = {f.name.lower() for f in flows}
+            for scenario in scenarios:
+                name = str(scenario.get("title") or scenario.get("name") or "").strip()
+                if not name or name.lower() in existing:
+                    continue
+                steps = [
+                    FlowStep(
+                        action=str(step.get("action", "assert")),
+                        selector=str(step.get("selector", "")),
+                        value=step.get("value"),
+                        description=str(step.get("description", "")),
+                        expected_result=str(step.get("expected_result", "")),
+                    )
+                    for step in scenario.get("steps", [])
+                    if isinstance(step, dict)
+                ]
+                flows.append(UserFlow(
+                    name=name,
+                    priority=str(scenario.get("priority", "MEDIUM")),
+                    description=str(scenario.get("description", "")),
+                    preconditions=[str(x) for x in scenario.get("preconditions", [])],
+                    steps=steps,
+                    expected_outcome=str(scenario.get("expected", scenario.get("expected_outcome", ""))),
+                    test_data=scenario.get("test_data", {}) if isinstance(scenario.get("test_data", {}), dict) else {},
+                ))
+                existing.add(name.lower())
+            run_data.flows = flows
+
+                # STEP 9: Test generation
+        task = progress.add_task("[9/16] Generating test code...", total=None)
+        try:
+            from src.llm.ollama import OllamaClient
+            client = OllamaClient()
             generator = TestGenerator(client=client, model=model)
-            test_suite = await generator.generate(flows, url, run_dir)
+            test_suite = await generator.generate(flows, url, run_dir, srs_context=srs_context, design_context=design_context)
             run_data.test_suite = test_suite
             progress.update(
                 task,
-                description=f"[7/13] Generated {test_suite.test_count} tests"
+                description=f"[9/16] Generated {test_suite.test_count} tests"
                 + (" ⚠ syntax errors" if not test_suite.syntax_valid else ""),
             )
         except Exception as exc:
@@ -206,8 +280,8 @@ async def _full_run(
             test_suite = None
         progress.remove_task(task)
 
-        # STEP 8: Execute tests
-        task = progress.add_task("[8/13] Running tests...", total=None)
+                # STEP 10: Execute tests
+        task = progress.add_task("[10/16] Running tests...", total=None)
         execution_result = None
         if test_suite:
             try:
@@ -216,17 +290,17 @@ async def _full_run(
                 run_data.execution_result = execution_result
                 progress.update(
                     task,
-                    description=f"[8/13] Tests: {execution_result.passed}/{execution_result.total} passed",
+                    description=f"[10/16] Tests: {execution_result.passed}/{execution_result.total} passed",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Test execution error: {exc}[/yellow]")
         else:
-            progress.update(task, description="[8/13] Tests: skipped (no suite)")
+            progress.update(task, description="[10/16] Tests: skipped (no suite)")
         progress.remove_task(task)
 
-        # STEP 9: Accessibility audit
+                # STEP 11: Accessibility audit
         if a11y and run_data.crawl_result:
-            task = progress.add_task("[9/13] Auditing accessibility...", total=None)
+            task = progress.add_task("[11/16] Auditing accessibility...", total=None)
             try:
                 auditor = AccessibilityAuditor()
                 a11y_report = await auditor.audit(
@@ -235,15 +309,28 @@ async def _full_run(
                 run_data.a11y_report = a11y_report
                 progress.update(
                     task,
-                    description=f"[9/13] WCAG score: {a11y_report.wcag_score:.0f}/100 ({a11y_report.total_violations} violations)",
+                    description=f"[11/16] WCAG score: {a11y_report.wcag_score:.0f}/100 ({a11y_report.total_violations} violations)",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Accessibility audit failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 10: Visual diff
+                # STEP 12: Design vs live semantic comparison
+        if design_context and run_data.crawl_result:
+            try:
+                comparator = DesignComparator()
+                design_doc = comparator.load_pen(Path(pen_path))
+                live_pages = [p.model_dump(mode="json") for p in run_data.crawl_result.pages]
+                comparison = comparator.compare(design_doc, live_pages)
+                (run_dir / "design_comparison.json").write_text(
+                    json.dumps(comparison, indent=2, default=str), encoding="utf-8"
+                )
+            except Exception as exc:
+                console.print(f"[yellow]⚠ Design comparison failed: {exc}[/yellow]")
+
+                # STEP 13: Visual diff
         if visual_diff and run_data.crawl_result:
-            task = progress.add_task("[10/13] Computing visual diffs...", total=None)
+            task = progress.add_task("[13/16] Computing visual diffs...", total=None)
             try:
                 differ = VisualDiffer(cli=cli)
                 before_map = await differ.capture_baseline(run_data.crawl_result.pages, run_dir)
@@ -252,18 +339,18 @@ async def _full_run(
                 run_data.visual_diff_result = vdiff
                 progress.update(
                     task,
-                    description=f"[10/13] Visual diff: {vdiff.pages_changed}/{vdiff.total_pages} pages changed",
+                    description=f"[13/16] Visual diff: {vdiff.pages_changed}/{vdiff.total_pages} pages changed",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Visual diff failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 11: Severity scoring
+                # STEP 14: Severity scoring
         if execution_result and execution_result.failed > 0:
-            task = progress.add_task("[11/13] Scoring failure severity...", total=None)
+            task = progress.add_task("[14/16] Scoring failure severity...", total=None)
             try:
-                from openai import AsyncOpenAI
-                client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                from src.llm.ollama import OllamaClient
+                client = OllamaClient()
                 scorer = SeverityScorer(client=client, model=model)
                 scored = await scorer.score(
                     execution_result,
@@ -276,26 +363,28 @@ async def _full_run(
                     sev = sf.severity.upper()
                     if sev in run_data.severity_breakdown:
                         run_data.severity_breakdown[sev] += 1
-                progress.update(task, description=f"[11/13] Severity scored: {len(scored)} failures")
+                progress.update(task, description=f"[14/16] Severity scored: {len(scored)} failures")
             except Exception as exc:
                 console.print(f"[yellow]⚠ Severity scoring failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 12: Generate reports
-        task = progress.add_task("[12/13] Generating reports...", total=None)
+                # STEP 15: Generate reports
+        task = progress.add_task("[15/16] Generating reports...", total=None)
         run_data.finished_at = datetime.now(UTC)
         try:
             html_path = HTMLReporter().generate(run_data)
             json_path = JSONReporter().generate(run_data)
-            progress.update(task, description="[12/13] Reports saved")
+            ExcelReporter().generate(run_data)
+            PDFReporter().generate(run_data)
+            progress.update(task, description="[15/16] HTML + JSON + Excel + PDF reports saved")
         except Exception as exc:
             console.print(f"[red]✗ Report generation failed: {exc}[/red]")
             raise typer.Exit(1) from exc
         progress.remove_task(task)
 
-        # STEP 13: Trace viewer
+                # STEP 16: Trace viewer
         if interactive and execution_result and execution_result.failed > 0:
-            task = progress.add_task("[13/13] Opening trace viewer...", total=None)
+            task = progress.add_task("[16/16] Opening trace viewer...", total=None)
             failed_with_trace = [
                 t for t in execution_result.tests if t.status == "failed" and t.trace_path
             ]
@@ -348,6 +437,18 @@ def _print_summary(run_data: RunData, html_path: Path, json_path: Path) -> None:
     console.print()
     console.print(f"[bold green]✓ Report saved to:[/bold green] {html_path}")
     console.print(f"[bold green]✓ JSON saved to:[/bold green]   {json_path}")
+    excel_path = run_data.run_dir / "execution-report.xlsx"
+    pdf_path = run_data.run_dir / "final-report.pdf"
+    if excel_path.exists():
+        console.print(f"[bold green]✓ Excel saved to:[/bold green]  {excel_path}")
+    if pdf_path.exists():
+        console.print(f"[bold green]✓ PDF saved to:[/bold green]    {pdf_path}")
+    excel_path = run_data.run_dir / "execution-report.xlsx"
+    pdf_path = run_data.run_dir / "final-report.pdf"
+    if excel_path.exists():
+        console.print(f"[bold green]✓ Excel saved to:[/bold green]  {excel_path}")
+    if pdf_path.exists():
+        console.print(f"[bold green]✓ PDF saved to:[/bold green]    {pdf_path}")
 
 
 @app.command()
@@ -360,6 +461,8 @@ def run(
     visual_diff: bool = typer.Option(False, "--visual-diff", help="Capture visual diffs", is_flag=True),
     interactive: bool = typer.Option(False, "--interactive", help="Open trace viewer on failure", is_flag=True),
     log_level: str = typer.Option(os.getenv("QA_LOG_LEVEL", "INFO"), "--log-level", help="Logging level"),
+    srs: str = typer.Option("", "--srs", help="Optional SRS/requirements file"),
+    pen: str = typer.Option("", "--pen", help="Optional .pen UI design file"),
 ) -> None:
     """
     Run the full autonomous QA agent against a URL.
@@ -383,7 +486,7 @@ def run(
             f"[dim]Depth:[/dim] {depth} | "
             f"[dim]Browsers:[/dim] {', '.join(browser_list)} | "
             f"[dim]Headless:[/dim] {headless} | "
-            f"[dim]A11y:[/dim] {a11y}",
+            f"[dim]A11y:[/dim] {a11y} | [dim]SRS:[/dim] {bool(srs)} | [dim].pen:[/dim] {bool(pen)}",
             border_style="cyan",
         )
     )
@@ -398,6 +501,8 @@ def run(
             visual_diff=visual_diff,
             interactive=interactive,
             log_level=log_level,
+            srs_path=srs,
+            pen_path=pen,
         )
     )
 

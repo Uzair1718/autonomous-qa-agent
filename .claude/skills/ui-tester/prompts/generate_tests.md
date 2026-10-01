@@ -25,6 +25,8 @@ PLAYWRIGHT-SPECIFIC REQUIREMENTS:
 - Use page.locator() not page.querySelector()
 - Use expect(locator).to_be_visible() not locator.is_visible()
 - Screenshots on failure via page.screenshot()
+- Record browser console errors and failed network requests for every test; save them under logs/.
+- Record test video using Playwright context video recording when the environment supports it; save under videos/.
 - TRACING: tracing.start() and tracing.stop() are plain coroutines — call them with await, NOT as async context managers. Correct pattern:
     await context.tracing.start(screenshots=True, snapshots=True, sources=True)
     try:
@@ -67,11 +69,11 @@ Generate a single Python file with:
 
 4. FIXTURES section:
    - @pytest.fixture async def browser() — launches headless chromium, yields browser, closes it
-   - @pytest.fixture async def page(browser) — creates context + page, yields page, closes context
+   - @pytest.fixture async def page(browser) — creates a fresh context with record_video_dir=Path("videos"), creates page, installs console/error and requestfailed listeners, yields page, closes context
    - IMPORTANT: Never define a fixture named "base_url" — always use the BASE_URL module-level constant directly
    - Do NOT set up tracing in fixtures — put tracing start/stop inside each test function
 
-5. TEST FUNCTIONS section:
+5. ADVERSARIAL COVERAGE:\n   - For each applicable flow, add negative validation, boundary values, duplicate submission, refresh/back/forward, unauthorized/direct URL, and expired-session checks.\n   - Never invent credentials or destructive data; use values supplied in the test-user context.\n   - Treat payment actions as non-destructive unless explicitly configured.\n\n6. TEST FUNCTIONS section:
    - One async test function per flow
    - Name: test_<flow_name_in_snake_case>
    - Docstring: flow description

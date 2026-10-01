@@ -6,7 +6,7 @@
 [![Coverage](https://img.shields.io/codecov/c/github/iklymchuk/autonomous-qa-agent)](https://codecov.io/gh/iklymchuk/autonomous-qa-agent)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![Playwright](https://img.shields.io/badge/playwright-1.49-green.svg)](https://playwright.dev/)
-[![OpenAI](https://img.shields.io/badge/openai-gpt--4o--mini-412991.svg)](https://platform.openai.com/)
+[![Ollama](https://img.shields.io/badge/LLM-Ollama-local-blue.svg)](https://ollama.com/)
 
 ---
 
@@ -15,7 +15,7 @@
 AutonomousQA Agent is a production-grade autonomous QA platform that requires **zero human-written test scripts**. Given only a URL, it:
 
 - 🕷️ **Crawls** the web app with a BFS Playwright browser, extracting full DOM snapshots
-- 🧠 **Infers** realistic user flows using GPT-4o-mini from DOM structure + codegen context
+- 🧠 **Infers** realistic user flows using a local Ollama model from DOM structure + codegen context
 - ⚙️ **Generates** executable Playwright pytest files with Page Object Model — dynamically
 - ▶️ **Executes** the generated tests and captures Playwright traces per test
 - ♿ **Audits** accessibility with axe-core injection (WCAG 2.1 AA score)
@@ -23,7 +23,7 @@ AutonomousQA Agent is a production-grade autonomous QA platform that requires **
 - 🔴 **Classifies** failures by business severity (CRITICAL / HIGH / MEDIUM / LOW) via AI
 - 📊 **Reports** everything in a self-contained HTML + JSON report
 
-No test scripts are written by humans. The agent does it all.
+No test scripts are written by humans. The agent does it all. The reasoning layer runs locally through Ollama; no OpenAI API key is required.
 
 ---
 
@@ -36,14 +36,17 @@ No test scripts are written by humans. The agent does it all.
 ## Quick Start
 
 ```bash
-git clone https://github.com/iklymchuk/autonomous-qa-agent.git
+git clone https://github.com/Uzair1718/autonomous-qa-agent.git
 cd autonomous-qa-agent
 
 make install
 make install-browsers
 
 cp .env.example .env
-# → add your OPENAI_API_KEY
+# Install a local model (default: Qwen3 8B)
+ollama pull qwen3:8b
+# Start Ollama if it is not already running
+ollama serve
 
 make demo
 ```
@@ -76,7 +79,7 @@ flowchart TD
         A11Y["axe-core\nAudit"]
     end
 
-    subgraph AI["AI Layer — OpenAI gpt-4o-mini  (temp=0)"]
+    subgraph AI["AI Layer — local Ollama model  (temperature=0)"]
         direction LR
         FI["Flow\nInferencer"]
         TG["Test\nGenerator"]
@@ -109,7 +112,7 @@ sequenceDiagram
     participant CLI as qa-agent CLI
     participant Bridge as cli_bridge.py<br/>(Layer 1)
     participant PW as Playwright<br/>Python API (Layer 2)
-    participant AI as OpenAI<br/>gpt-4o-mini
+    participant AI as Ollama<br/>local model
     participant FS as reports/<run_id>/
 
     CLI->>Bridge: get_version()
@@ -184,7 +187,7 @@ sequenceDiagram
 ```bash
 qa-agent run --url https://example.com
 qa-agent run --url https://example.com --depth 5 --browsers chromium,firefox
-qa-agent run --url https://example.com --visual-diff
+qa-agent run --url https://example.com --visual-diff --srs requirements.md --pen design.pen
 qa-agent run --url https://example.com --headed --interactive
 ```
 
@@ -323,14 +326,14 @@ make coverage
 # Opens htmlcov/index.html  (target: 80%+)
 ```
 
-### Integration tests (requires `OPENAI_API_KEY`)
+### Integration tests (requires a running Ollama model)
 
 ```bash
 export OPENAI_API_KEY=sk-...
 make test-integration
 ```
 
-Integration tests are automatically skipped without a key:
+Integration tests require Ollama to be running locally:
 
 ```
 SKIP tests/integration/test_full_agent_run.py::test_full_agent_run_creates_reports
@@ -359,3 +362,23 @@ Coverage target: **80%+** (enforced in CI). All new modules require unit tests t
 ---
 
 **Built with ❤️ by Ivan Klymchuk**
+
+## Local LLM configuration\n\nThe completed QA pipeline also exports Excel and PDF artifacts and accepts optional SRS and `.pen` design files. Test-user definitions can be supplied in `qa-users.json`; disposable email verification is supported through Mail.tm.
+
+The agent no longer requires an OpenAI API. It talks directly to Ollama over HTTP.
+
+```bash
+# .env
+OLLAMA_BASE_URL=http://localhost:11434
+QA_MODEL=qwen3:8b
+QA_MAX_DEPTH=3
+QA_BROWSERS=chromium\nQA_EXPLORATORY_STEPS=15\nQA_USERS_FILE=qa-users.json
+```
+
+Recommended local models:
+
+- `qwen3:8b` — lighter machines
+- `qwen3:14b` — stronger reasoning when hardware allows
+- Any Ollama chat model can be selected with `QA_MODEL`
+
+The browser remains deterministic Playwright automation. The local model plans flows, expands adversarial scenarios, performs a bounded exploratory pass, generates test code, and classifies failures. Playwright executes the selected actions and captures evidence. The pipeline exports HTML, JSON, Excel, and PDF reports. Mail.tm helpers can be used for disposable email verification, while credentials stay in local user files and are not logged.

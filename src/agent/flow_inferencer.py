@@ -1,5 +1,5 @@
 """
-Flow inference: sends DOM snapshots to OpenAI GPT-4o to infer realistic user flows.
+Flow inference: sends DOM snapshots and requirements/design context to the configured local Ollama LLM.
 """
 
 from __future__ import annotations
@@ -8,8 +8,9 @@ import json
 import logging
 from pathlib import Path
 
-from openai import AsyncOpenAI
+from typing import Any
 
+from src.llm.ollama import OllamaClient
 from src.models import CrawlResult, FlowStep, UserFlow
 
 logger = logging.getLogger(__name__)
@@ -46,12 +47,12 @@ def _extract_system_prompt(prompt_content: str) -> str:
 
 class FlowInferencer:
     """
-    Sends crawl results to OpenAI to infer structured user flows.
-    Uses gpt-4o-mini at temperature=0 for deterministic, reproducible outputs.
+    Sends crawl results to the configured local LLM to infer structured user flows.
+    Uses qwen3:8b at temperature=0 for deterministic, reproducible outputs.
     """
 
-    def __init__(self, client: AsyncOpenAI | None = None, model: str = "gpt-4o-mini") -> None:
-        self._client = client or AsyncOpenAI()
+    def __init__(self, client: Any | None = None, model: str = "qwen3:8b") -> None:
+        self._client = client or OllamaClient()
         self._model = model
 
     def _deduplicate_flows(self, flows: list[UserFlow]) -> list[UserFlow]:
@@ -114,9 +115,11 @@ class FlowInferencer:
         self,
         crawl_result: CrawlResult,
         codegen_script: str = "",
+        srs_context: str = "",
+        design_context: str = "",
     ) -> list[UserFlow]:
         """
-        Infer realistic user flows from crawl results using OpenAI.
+        Infer realistic user flows from crawl results using Ollama/local LLM.
 
         Args:
             crawl_result: BFS crawl result with DOM snapshots
@@ -144,6 +147,8 @@ class FlowInferencer:
         user_content = (
             f"Base URL: {crawl_result.base_url}\n\n"
             f"Codegen Scaffold (recorded human interactions):\n```python\n{codegen_script[:3000]}\n```\n\n"
+            f"SRS / Requirements:\n```text\n{srs_context[:12000]}\n```\n\n"
+            f"UI Design (.pen):\n```text\n{design_context[:12000]}\n```\n\n"
             f"Crawl Result (DOM snapshots):\n```json\n{json.dumps(crawl_data, indent=2)[:8000]}\n```\n\n"
             "Return ONLY a valid JSON array of user flows. No markdown, no explanation."
         )
@@ -177,7 +182,7 @@ class FlowInferencer:
                     logger.error("Flow inference failed after retry: %s", exc)
                     return []
             except Exception as exc:
-                logger.error("OpenAI call failed during flow inference: %s", exc)
+                logger.error("local LLM call failed during flow inference: %s", exc)
                 if attempt == 1:
                     return []
 

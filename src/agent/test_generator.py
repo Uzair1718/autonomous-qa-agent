@@ -1,5 +1,5 @@
 """
-Test generation: sends user flows to OpenAI to generate executable pytest + Playwright code.
+Test generation: sends user flows to local LLM to generate executable pytest + Playwright code.
 Validates syntax via ast.parse() before saving.
 """
 
@@ -10,8 +10,9 @@ import json
 import logging
 from pathlib import Path
 
-from openai import AsyncOpenAI
+from typing import Any
 
+from src.llm.ollama import OllamaClient
 from src.models import GeneratedTestSuite, UserFlow
 
 logger = logging.getLogger(__name__)
@@ -90,16 +91,23 @@ def _extract_page_objects(code: str) -> list[str]:
 
 class TestGenerator:
     """
-    Generates executable pytest + Playwright test code from user flows via OpenAI.
+    Generates executable pytest + Playwright test code from user flows via Ollama/local LLM.
     Validates syntax with ast.parse() and retries once on syntax error.
     """
 
-    def __init__(self, client: AsyncOpenAI | None = None, model: str = "gpt-4o-mini") -> None:
-        self._client = client or AsyncOpenAI()
+    def __init__(self, client: Any | None = None, model: str = "qwen3:8b") -> None:
+        self._client = client or OllamaClient()
         self._model = model
 
-    async def _call_openai(self, flows: list[UserFlow], base_url: str, retry_hint: str = "") -> str:
-        """Make a single OpenAI call to generate test code."""
+    async def _call_local_llm(
+        self,
+        flows: list[UserFlow],
+        base_url: str,
+        retry_hint: str = "",
+        srs_context: str = "",
+        design_context: str = "",
+    ) -> str:
+        """Make a single local LLM call to generate test code."""
         system_prompt = _load_system_prompt("generate_tests.md")
 
         flows_json = json.dumps([f.model_dump(mode="json") for f in flows], indent=2)
@@ -108,6 +116,8 @@ class TestGenerator:
             f"Base URL: {base_url}\n"
             f"Number of flows: {len(flows)}\n\n"
             f"User Flows:\n```json\n{flows_json}\n```\n\n"
+            f"SRS / Requirements:\n```text\n{srs_context[:12000]}\n```\n\n"
+            f"UI Design (.pen):\n```text\n{design_context[:12000]}\n```\n\n"
             "Generate a single complete Python pytest file. "
             "Return ONLY the Python code, no markdown fences, no explanation."
         )
@@ -131,6 +141,8 @@ class TestGenerator:
         flows: list[UserFlow],
         base_url: str,
         run_dir: Path = Path("reports"),
+        srs_context: str = "",
+        design_context: str = "",
     ) -> GeneratedTestSuite:
         """
         Generate an executable pytest file from user flows.
@@ -167,10 +179,12 @@ class TestGenerator:
 
         for attempt in range(2):
             try:
-                raw = await self._call_openai(
+                raw = await self._call_local_llm(
                     flows,
                     base_url,
                     retry_hint=generation_errors[-1] if generation_errors else "",
+                    srs_context=srs_context,
+                    design_context=design_context,
                 )
                 raw_code = _extract_python_code(raw)
 
@@ -189,7 +203,7 @@ class TestGenerator:
 
             except Exception as exc:
                 error_msg = str(exc)
-                logger.error("OpenAI call failed during test generation: %s", error_msg)
+                logger.error("Local LLM call failed during test generation: %s", error_msg)
                 generation_errors.append(error_msg)
                 break
 
