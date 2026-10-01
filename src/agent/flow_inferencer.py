@@ -115,6 +115,8 @@ class FlowInferencer:
         self,
         crawl_result: CrawlResult,
         codegen_script: str = "",
+        srs_context: str = "",
+        design_context: str = "",
     ) -> list[UserFlow]:
         """
         Infer realistic user flows from crawl results using Ollama/local LLM.
@@ -145,6 +147,8 @@ class FlowInferencer:
         user_content = (
             f"Base URL: {crawl_result.base_url}\n\n"
             f"Codegen Scaffold (recorded human interactions):\n```python\n{codegen_script[:3000]}\n```\n\n"
+            f"SRS / Requirements:\n```text\n{srs_context[:12000]}\n```\n\n"
+            f"UI Design (.pen):\n```text\n{design_context[:12000]}\n```\n\n"
             f"Crawl Result (DOM snapshots):\n```json\n{json.dumps(crawl_data, indent=2)[:8000]}\n```\n\n"
             "Return ONLY a valid JSON array of user flows. No markdown, no explanation."
         )
