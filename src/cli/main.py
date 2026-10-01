@@ -63,6 +63,8 @@ async def _full_run(
     visual_diff: bool,
     interactive: bool,
     log_level: str,
+    srs_path: str = "",
+    pen_path: str = "",
 ) -> None:
     """Full orchestrated agent run."""
     from src.agent.crawler import SiteCrawler
@@ -93,6 +95,12 @@ async def _full_run(
     )
 
     run_dir = config.reports_dir / config.run_id
+    srs_context = Path(srs_path).read_text(encoding="utf-8") if srs_path else ""
+    design_context = Path(pen_path).read_text(encoding="utf-8") if pen_path else ""
+    if srs_context:
+        (run_dir / "srs_input.md").write_text(srs_context, encoding="utf-8")
+    if design_context:
+        (run_dir / "design_input.pen").write_text(design_context, encoding="utf-8")
     run_dir.mkdir(parents=True, exist_ok=True)
 
     run_data = RunData(
@@ -180,7 +188,7 @@ async def _full_run(
             from src.llm.ollama import OllamaClient
             client = OllamaClient()
             inferencer = FlowInferencer(client=client, model=model)
-            flows = await inferencer.infer(crawl_result, codegen_script)
+            flows = await inferencer.infer(crawl_result, codegen_script, srs_context=srs_context, design_context=design_context)
             run_data.flows = flows
             progress.update(task, description=f"[6/13] {len(flows)} user flows inferred")
         except Exception as exc:
@@ -194,7 +202,7 @@ async def _full_run(
             from src.llm.ollama import OllamaClient
             client = OllamaClient()
             generator = TestGenerator(client=client, model=model)
-            test_suite = await generator.generate(flows, url, run_dir)
+            test_suite = await generator.generate(flows, url, run_dir, srs_context=srs_context, design_context=design_context)
             run_data.test_suite = test_suite
             progress.update(
                 task,
@@ -360,6 +368,8 @@ def run(
     visual_diff: bool = typer.Option(False, "--visual-diff", help="Capture visual diffs", is_flag=True),
     interactive: bool = typer.Option(False, "--interactive", help="Open trace viewer on failure", is_flag=True),
     log_level: str = typer.Option(os.getenv("QA_LOG_LEVEL", "INFO"), "--log-level", help="Logging level"),
+    srs: str = typer.Option("", "--srs", help="Optional SRS/requirements file"),
+    pen: str = typer.Option("", "--pen", help="Optional .pen UI design file"),
 ) -> None:
     """
     Run the full autonomous QA agent against a URL.
@@ -383,7 +393,7 @@ def run(
             f"[dim]Depth:[/dim] {depth} | "
             f"[dim]Browsers:[/dim] {', '.join(browser_list)} | "
             f"[dim]Headless:[/dim] {headless} | "
-            f"[dim]A11y:[/dim] {a11y}",
+            f"[dim]A11y:[/dim] {a11y} | [dim]SRS:[/dim] {bool(srs)} | [dim].pen:[/dim] {bool(pen)}",
             border_style="cyan",
         )
     )
@@ -398,6 +408,8 @@ def run(
             visual_diff=visual_diff,
             interactive=interactive,
             log_level=log_level,
+            srs_path=srs,
+            pen_path=pen,
         )
     )
 
