@@ -98,10 +98,17 @@ class OllamaClient:
 
     async def list_models(self) -> list[str]:
         """List locally available Ollama model names."""
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(f"{self.base_url}/api/tags")
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+                response.raise_for_status()
+                data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise OllamaError(
+                f"Could not reach Ollama at {self.base_url}. "
+                "Start Ollama with 'ollama serve'. Details: "
+                f"{exc}"
+            ) from exc
         return [m.get("name", "") for m in data.get("models", []) if m.get("name")]
 
     async def ensure_model(self, model: str) -> None:
