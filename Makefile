@@ -1,7 +1,7 @@
 .PHONY: install install-browsers demo test test-integration coverage lint typecheck clean codegen har
 
 install:
-	poetry install
+	python -m pip install -e .
 
 install-browsers:
 	poetry run playwright install chromium firefox webkit
