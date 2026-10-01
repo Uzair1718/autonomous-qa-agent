@@ -30,7 +30,7 @@ class _ChatCompletions:
         temperature: float = 0,
         **kwargs: Any,
     ) -> Any:
-        return await self._client.chat(
+        return await self._client._chat(
             model=model,
             messages=messages,
             temperature=temperature,
@@ -52,7 +52,7 @@ class OllamaClient:
         # Compatibility shape used by the existing agent modules:
         self.chat = SimpleNamespace(completions=self.chat_completions)
 
-    async def chat(
+    async def _chat(
         self,
         *,
         model: str,
