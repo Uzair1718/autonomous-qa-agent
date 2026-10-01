@@ -1,0 +1,13 @@
+[
+  {
+    "role": "admin",
+    "email": "admin@example.test",
+    "password": "REPLACE_ME",
+    "notes": "Use a non-production account."
+  },
+  {
+    "role": "user",
+    "email": "user@example.test",
+    "password": "REPLACE_ME"
+  }
+]
