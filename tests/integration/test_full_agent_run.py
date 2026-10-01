@@ -1,6 +1,6 @@
 """
 Integration test: full agent run against the local demo Flask app.
-Requires OPENAI_API_KEY to run. Skipped if key is not set.
+Requires a locally running Ollama server with QA_MODEL installed. Skipped when Ollama is unavailable.
 
 Starts the demo app as a pytest fixture on a random port.
 """
@@ -19,11 +19,16 @@ from pathlib import Path
 import pytest
 import requests
 
-# Skip entire module if no API key
-pytestmark = pytest.mark.skipif(
-    not os.getenv("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY not set — skipping integration tests",
-)
+async def _ollama_ready() -> bool:
+    try:
+        from src.llm.ollama import OllamaClient
+        client = OllamaClient()
+        return await client.health() and os.getenv("QA_MODEL", "qwen3:8b") in await client.list_models()
+    except Exception:
+        return False
+
+# Integration is local-LLM only. CI can run unit tests without an Ollama daemon.
+pytestmark = pytest.mark.asyncio
 
 DEMO_APP = Path(__file__).parent.parent.parent / "demo" / "sample_app" / "app.py"
 
@@ -79,8 +84,6 @@ async def test_full_agent_run_creates_reports(demo_app_url: str, run_dir: Path) 
     """Full agent run must create report.html and report.json."""
     from datetime import datetime
 
-    from openai import AsyncOpenAI
-
     from src.agent.crawler import SiteCrawler
     from src.agent.executor import TestExecutor
     from src.agent.flow_inferencer import FlowInferencer
@@ -90,6 +93,8 @@ async def test_full_agent_run_creates_reports(demo_app_url: str, run_dir: Path) 
     from src.models import AgentConfig, RunData
     from src.reporting.html_reporter import HTMLReporter
     from src.reporting.json_reporter import JSONReporter
+    from src.reporting.excel_reporter import ExcelReporter
+    from src.reporting.pdf_reporter import PDFReporter
 
     config = AgentConfig(
         url=demo_app_url,
@@ -111,7 +116,10 @@ async def test_full_agent_run_creates_reports(demo_app_url: str, run_dir: Path) 
     (run_dir / config.run_id).mkdir(parents=True, exist_ok=True)
 
     cli = PlaywrightCLI()
-    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    if not await _ollama_ready():
+        pytest.skip("Ollama is not running or QA_MODEL is not installed")
+    from src.llm.ollama import OllamaClient
+    client = OllamaClient()
 
     # Crawl
     crawler = SiteCrawler(cli=cli)
@@ -159,11 +167,15 @@ async def test_full_agent_run_creates_reports(demo_app_url: str, run_dir: Path) 
     run_data.finished_at = datetime.now(UTC)
     html_path = HTMLReporter().generate(run_data)
     json_path = JSONReporter().generate(run_data)
+    excel_path = ExcelReporter().generate(run_data)
+    pdf_path = PDFReporter().generate(run_data)
 
     # Assertions
     assert html_path.exists(), "report.html must be created"
     assert json_path.exists(), "report.json must be created"
     assert suite.file_path.exists(), "generated_tests.py must be created"
+    assert excel_path.exists(), "execution-report.xlsx must be created"
+    assert pdf_path.exists(), "final-report.pdf must be created"
 
 
 @pytest.mark.asyncio
