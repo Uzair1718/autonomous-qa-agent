@@ -287,7 +287,7 @@ class AgentConfig(BaseModel):
     interactive: bool = False
     run_id: str = ""
     reports_dir: Path = Path("reports")
-    model: str = "gpt-4o-mini"
+    model: str = "qwen3:8b"
     log_level: str = "INFO"
 
 
