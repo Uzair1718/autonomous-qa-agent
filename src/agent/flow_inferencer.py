@@ -1,5 +1,5 @@
 """
-Flow inference: sends DOM snapshots to local LLM GPT-4o to infer realistic user flows.
+Flow inference: sends DOM snapshots and requirements/design context to the configured local Ollama LLM.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def _extract_system_prompt(prompt_content: str) -> str:
 
 class FlowInferencer:
     """
-    Sends crawl results to OpenAI to infer structured user flows.
+    Sends crawl results to the configured local LLM to infer structured user flows.
     Uses qwen3:8b at temperature=0 for deterministic, reproducible outputs.
     """
 
