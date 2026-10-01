@@ -28,7 +28,7 @@ load_dotenv()
 
 app = typer.Typer(
     name="qa-agent",
-    help="🤖 AutonomousQA Agent — zero-config AI-powered web testing",
+    help="🤖 AutonomousQA Agent — local-LLM autonomous web testing",
     rich_markup_mode="rich",
 )
 console = Console()
@@ -109,6 +109,14 @@ async def _full_run(
         started_at=datetime.now(UTC),
         run_dir=run_dir,
     )
+
+    from src.llm.ollama import OllamaClient, OllamaError
+    llm = OllamaClient()
+    try:
+        await llm.ensure_model(model)
+    except OllamaError as exc:
+        console.print(f"[red]✗ Local LLM unavailable: {exc}[/red]")
+        raise typer.Exit(1) from exc
 
     cli = PlaywrightCLI()
 
