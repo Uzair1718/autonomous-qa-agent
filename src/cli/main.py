@@ -106,11 +106,11 @@ async def _full_run(
     users_context = users_path.read_text(encoding="utf-8") if users_path.exists() else ""
     if users_context:
         srs_context += "\n\nTEST USERS / ROLES:\n" + users_context[:8000]
+    run_dir.mkdir(parents=True, exist_ok=True)
     if srs_context:
         (run_dir / "srs_input.md").write_text(srs_context, encoding="utf-8")
     if design_context:
         (run_dir / "design_input.pen").write_text(design_context, encoding="utf-8")
-    run_dir.mkdir(parents=True, exist_ok=True)
 
     run_data = RunData(
         run_id=config.run_id,
