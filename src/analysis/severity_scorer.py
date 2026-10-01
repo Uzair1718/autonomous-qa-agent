@@ -1,5 +1,5 @@
 """
-Severity scorer: batches all test failures into a single OpenAI call for classification.
+Severity scorer: batches all test failures into a single local LLM call for classification.
 """
 
 from __future__ import annotations
@@ -8,8 +8,9 @@ import json
 import logging
 from pathlib import Path
 
-from openai import AsyncOpenAI
+from typing import Any
 
+from src.llm.ollama import OllamaClient
 from src.models import ExecutionResult, ScoredFailure, TestResult
 
 logger = logging.getLogger(__name__)
@@ -45,16 +46,16 @@ def _load_system_prompt() -> str:
 
 class SeverityScorer:
     """
-    Classifies test failures by business severity using OpenAI.
+    Classifies test failures by business severity using Ollama/local LLM.
     Batches ALL failures into a single API call for efficiency.
     """
 
     def __init__(
         self,
-        client: AsyncOpenAI | None = None,
-        model: str = "gpt-4o-mini",
+        client: Any | None = None,
+        model: str = "qwen3:8b",
     ) -> None:
-        self._client = client or AsyncOpenAI()
+        self._client = client or OllamaClient()
         self._model = model
 
     def _build_failure_payload(
@@ -62,7 +63,7 @@ class SeverityScorer:
         failed_tests: list[TestResult],
         generated_tests_path: Path | None = None,
     ) -> list[dict[str, str]]:
-        """Build the JSON payload for OpenAI from failed test results."""
+        """Build the JSON payload for local LLM from failed test results."""
         # Try to load generated test source for context
         test_source = ""
         if generated_tests_path and generated_tests_path.exists():
@@ -119,7 +120,7 @@ class SeverityScorer:
             logger.info("No failures to score")
             return []
 
-        logger.info("Scoring %d test failures via OpenAI...", len(failed_tests))
+        logger.info("Scoring %d test failures via Ollama/local LLM...", len(failed_tests))
 
         system_prompt = _load_system_prompt()
         failure_payload = self._build_failure_payload(failed_tests, generated_tests_path)
