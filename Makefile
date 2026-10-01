@@ -10,7 +10,7 @@ demo:
 	@echo "Starting demo app and running QA agent..."
 	FLASK_PORT=5001 python demo/sample_app/app.py &
 	sleep 2
-	python -m qa-agent run --url http://localhost:5001
+	qa-agent run --url http://localhost:5001
 	@pkill -f "demo/sample_app/app.py" || true
 
 test:
