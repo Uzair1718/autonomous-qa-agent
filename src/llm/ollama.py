@@ -6,7 +6,6 @@ runtime dependency on the OpenAI SDK/API.
 
 from __future__ import annotations
 
-import json
 import os
 from types import SimpleNamespace
 from typing import Any
