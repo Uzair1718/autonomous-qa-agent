@@ -261,7 +261,7 @@ async def _full_run(
             run_data.flows = flows
 
         # STEP 8: Test generation
-        task = progress.add_task("[7/13] Generating test code...", total=None)
+        task = progress.add_task("[8/14] Generating test code...", total=None)
         try:
             from src.llm.ollama import OllamaClient
             client = OllamaClient()
@@ -270,7 +270,7 @@ async def _full_run(
             run_data.test_suite = test_suite
             progress.update(
                 task,
-                description=f"[7/13] Generated {test_suite.test_count} tests"
+                description=f"[8/14] Generated {test_suite.test_count} tests"
                 + (" ⚠ syntax errors" if not test_suite.syntax_valid else ""),
             )
         except Exception as exc:
@@ -278,7 +278,7 @@ async def _full_run(
             test_suite = None
         progress.remove_task(task)
 
-        # STEP 8: Execute tests
+        # STEP 9: Execute tests
         task = progress.add_task("[9/14] Running tests...", total=None)
         execution_result = None
         if test_suite:
@@ -288,15 +288,15 @@ async def _full_run(
                 run_data.execution_result = execution_result
                 progress.update(
                     task,
-                    description=f"[8/13] Tests: {execution_result.passed}/{execution_result.total} passed",
+                    description=f"[9/14] Tests: {execution_result.passed}/{execution_result.total} passed",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Test execution error: {exc}[/yellow]")
         else:
-            progress.update(task, description="[8/13] Tests: skipped (no suite)")
+            progress.update(task, description="[9/14] Tests: skipped (no suite)")
         progress.remove_task(task)
 
-        # STEP 9: Accessibility audit
+        # STEP 10: Accessibility audit
         if a11y and run_data.crawl_result:
             task = progress.add_task("[10/14] Auditing accessibility...", total=None)
             try:
@@ -307,13 +307,13 @@ async def _full_run(
                 run_data.a11y_report = a11y_report
                 progress.update(
                     task,
-                    description=f"[9/13] WCAG score: {a11y_report.wcag_score:.0f}/100 ({a11y_report.total_violations} violations)",
+                    description=f"[10/14] WCAG score: {a11y_report.wcag_score:.0f}/100 ({a11y_report.total_violations} violations)",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Accessibility audit failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 10: Visual diff
+        # STEP 11: Visual diff
         if visual_diff and run_data.crawl_result:
             task = progress.add_task("[11/14] Computing visual diffs...", total=None)
             try:
@@ -324,13 +324,13 @@ async def _full_run(
                 run_data.visual_diff_result = vdiff
                 progress.update(
                     task,
-                    description=f"[10/13] Visual diff: {vdiff.pages_changed}/{vdiff.total_pages} pages changed",
+                    description=f"[11/14] Visual diff: {vdiff.pages_changed}/{vdiff.total_pages} pages changed",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Visual diff failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 11: Severity scoring
+        # STEP 12: Severity scoring
         if execution_result and execution_result.failed > 0:
             task = progress.add_task("[12/14] Scoring failure severity...", total=None)
             try:
@@ -348,12 +348,12 @@ async def _full_run(
                     sev = sf.severity.upper()
                     if sev in run_data.severity_breakdown:
                         run_data.severity_breakdown[sev] += 1
-                progress.update(task, description=f"[11/13] Severity scored: {len(scored)} failures")
+                progress.update(task, description=f"[12/14] Severity scored: {len(scored)} failures")
             except Exception as exc:
                 console.print(f"[yellow]⚠ Severity scoring failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 12: Generate reports
+        # STEP 13: Generate reports
         task = progress.add_task("[13/14] Generating reports...", total=None)
         run_data.finished_at = datetime.now(UTC)
         try:
@@ -365,7 +365,7 @@ async def _full_run(
             raise typer.Exit(1) from exc
         progress.remove_task(task)
 
-        # STEP 13: Trace viewer
+        # STEP 14: Trace viewer
         if interactive and execution_result and execution_result.failed > 0:
             task = progress.add_task("[14/14] Opening trace viewer...", total=None)
             failed_with_trace = [
