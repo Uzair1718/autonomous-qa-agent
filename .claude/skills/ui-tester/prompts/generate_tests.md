@@ -25,6 +25,8 @@ PLAYWRIGHT-SPECIFIC REQUIREMENTS:
 - Use page.locator() not page.querySelector()
 - Use expect(locator).to_be_visible() not locator.is_visible()
 - Screenshots on failure via page.screenshot()
+- Record browser console errors and failed network requests for every test; save them under logs/.
+- Record test video using Playwright context video recording when the environment supports it; save under videos/.
 - TRACING: tracing.start() and tracing.stop() are plain coroutines — call them with await, NOT as async context managers. Correct pattern:
     await context.tracing.start(screenshots=True, snapshots=True, sources=True)
     try:
@@ -67,7 +69,7 @@ Generate a single Python file with:
 
 4. FIXTURES section:
    - @pytest.fixture async def browser() — launches headless chromium, yields browser, closes it
-   - @pytest.fixture async def page(browser) — creates context + page, yields page, closes context
+   - @pytest.fixture async def page(browser) — creates a fresh context with record_video_dir=Path("videos"), creates page, installs console/error and requestfailed listeners, yields page, closes context
    - IMPORTANT: Never define a fixture named "base_url" — always use the BASE_URL module-level constant directly
    - Do NOT set up tracing in fixtures — put tracing start/stop inside each test function
 
