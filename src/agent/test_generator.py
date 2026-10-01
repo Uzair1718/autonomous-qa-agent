@@ -179,7 +179,7 @@ class TestGenerator:
 
         for attempt in range(2):
             try:
-                raw = await self._call_openai(
+                raw = await self._call_local_llm(
                     flows,
                     base_url,
                     retry_hint=generation_errors[-1] if generation_errors else "",
