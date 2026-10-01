@@ -187,7 +187,7 @@ sequenceDiagram
 ```bash
 qa-agent run --url https://example.com
 qa-agent run --url https://example.com --depth 5 --browsers chromium,firefox
-qa-agent run --url https://example.com --visual-diff
+qa-agent run --url https://example.com --visual-diff --srs requirements.md --pen design.pen
 qa-agent run --url https://example.com --headed --interactive
 ```
 
@@ -372,7 +372,7 @@ The agent no longer requires an OpenAI API. It talks directly to Ollama over HTT
 OLLAMA_BASE_URL=http://localhost:11434
 QA_MODEL=qwen3:8b
 QA_MAX_DEPTH=3
-QA_BROWSERS=chromium
+QA_BROWSERS=chromium\nQA_EXPLORATORY_STEPS=15\nQA_USERS_FILE=qa-users.json
 ```
 
 Recommended local models:
@@ -381,4 +381,4 @@ Recommended local models:
 - `qwen3:14b` — stronger reasoning when hardware allows
 - Any Ollama chat model can be selected with `QA_MODEL`
 
-The browser remains deterministic Playwright automation. The local model decides what to test, generates the test code, and classifies failures; it does not directly control the browser.
+The browser remains deterministic Playwright automation. The local model plans flows, expands adversarial scenarios, performs a bounded exploratory pass, generates test code, and classifies failures. Playwright executes the selected actions and captures evidence. The pipeline exports HTML, JSON, Excel, and PDF reports. Mail.tm helpers can be used for disposable email verification, while credentials stay in local user files and are not logged.
