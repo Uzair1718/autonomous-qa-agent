@@ -81,6 +81,7 @@ async def _full_run(
     from src.reporting.excel_reporter import ExcelReporter
     from src.reporting.pdf_reporter import PDFReporter
     from src.qa.planner import QAPlanner
+    from src.qa.design_compare import DesignComparator
 
     model = os.getenv("QA_MODEL", "qwen3:8b")
     config = AgentConfig(
@@ -312,6 +313,19 @@ async def _full_run(
             except Exception as exc:
                 console.print(f"[yellow]⚠ Accessibility audit failed: {exc}[/yellow]")
             progress.remove_task(task)
+
+        # STEP 11: Design vs live semantic comparison
+        if design_context and run_data.crawl_result:
+            try:
+                comparator = DesignComparator()
+                design_doc = comparator.load_pen(Path(pen_path))
+                live_pages = [p.model_dump(mode="json") for p in run_data.crawl_result.pages]
+                comparison = comparator.compare(design_doc, live_pages)
+                (run_dir / "design_comparison.json").write_text(
+                    json.dumps(comparison, indent=2, default=str), encoding="utf-8"
+                )
+            except Exception as exc:
+                console.print(f"[yellow]⚠ Design comparison failed: {exc}[/yellow]")
 
         # STEP 11: Visual diff
         if visual_diff and run_data.crawl_result:
