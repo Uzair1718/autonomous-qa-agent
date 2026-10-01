@@ -295,7 +295,7 @@ async def _full_run(
             except Exception as exc:
                 console.print(f"[yellow]⚠ Test execution error: {exc}[/yellow]")
         else:
-            progress.update(task, description="[10/15] Tests: skipped (no suite)")
+            progress.update(task, description="[10/16] Tests: skipped (no suite)")
         progress.remove_task(task)
 
                 # STEP 11: Accessibility audit
@@ -437,6 +437,12 @@ def _print_summary(run_data: RunData, html_path: Path, json_path: Path) -> None:
     console.print()
     console.print(f"[bold green]✓ Report saved to:[/bold green] {html_path}")
     console.print(f"[bold green]✓ JSON saved to:[/bold green]   {json_path}")
+    excel_path = run_data.run_dir / "execution-report.xlsx"
+    pdf_path = run_data.run_dir / "final-report.pdf"
+    if excel_path.exists():
+        console.print(f"[bold green]✓ Excel saved to:[/bold green]  {excel_path}")
+    if pdf_path.exists():
+        console.print(f"[bold green]✓ PDF saved to:[/bold green]    {pdf_path}")
     excel_path = run_data.run_dir / "execution-report.xlsx"
     pdf_path = run_data.run_dir / "final-report.pdf"
     if excel_path.exists():
