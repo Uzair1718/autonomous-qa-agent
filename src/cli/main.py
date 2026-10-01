@@ -78,6 +78,9 @@ async def _full_run(
     from src.models import AgentConfig, RunData
     from src.reporting.html_reporter import HTMLReporter
     from src.reporting.json_reporter import JSONReporter
+    from src.reporting.excel_reporter import ExcelReporter
+    from src.reporting.pdf_reporter import PDFReporter
+    from src.qa.planner import QAPlanner
 
     model = os.getenv("QA_MODEL", "qwen3:8b")
     config = AgentConfig(
@@ -97,6 +100,10 @@ async def _full_run(
     run_dir = config.reports_dir / config.run_id
     srs_context = Path(srs_path).read_text(encoding="utf-8") if srs_path else ""
     design_context = Path(pen_path).read_text(encoding="utf-8") if pen_path else ""
+    users_path = Path(os.getenv("QA_USERS_FILE", "qa-users.json"))
+    users_context = users_path.read_text(encoding="utf-8") if users_path.exists() else ""
+    if users_context:
+        srs_context += "\n\nTEST USERS / ROLES:\n" + users_context[:8000]
     if srs_context:
         (run_dir / "srs_input.md").write_text(srs_context, encoding="utf-8")
     if design_context:
@@ -204,7 +211,56 @@ async def _full_run(
             flows = []
         progress.remove_task(task)
 
-        # STEP 7: Test generation
+        # STEP 7: Adversarial scenario expansion
+        task = progress.add_task("[7/14] Expanding adversarial QA scenarios...", total=None)
+        try:
+            planner = QAPlanner(client=OllamaClient(), model=model)
+            scenarios = await planner.plan(
+                url,
+                crawl_result.model_dump(mode="json"),
+                srs=srs_context,
+                design=design_context,
+            )
+            (run_dir / "qa_scenarios.json").write_text(
+                json.dumps(scenarios, indent=2, default=str), encoding="utf-8"
+            )
+            progress.update(task, description=f"[7/14] Planned {len(scenarios)} adversarial scenarios")
+        except Exception as exc:
+            console.print(f"[yellow]⚠ Scenario planning failed: {exc}[/yellow]")
+            scenarios = []
+        progress.remove_task(task)
+
+        if scenarios:
+            from src.models import UserFlow, FlowStep
+            existing = {f.name.lower() for f in flows}
+            for scenario in scenarios:
+                name = str(scenario.get("title") or scenario.get("name") or "").strip()
+                if not name or name.lower() in existing:
+                    continue
+                steps = [
+                    FlowStep(
+                        action=str(step.get("action", "assert")),
+                        selector=str(step.get("selector", "")),
+                        value=step.get("value"),
+                        description=str(step.get("description", "")),
+                        expected_result=str(step.get("expected_result", "")),
+                    )
+                    for step in scenario.get("steps", [])
+                    if isinstance(step, dict)
+                ]
+                flows.append(UserFlow(
+                    name=name,
+                    priority=str(scenario.get("priority", "MEDIUM")),
+                    description=str(scenario.get("description", "")),
+                    preconditions=[str(x) for x in scenario.get("preconditions", [])],
+                    steps=steps,
+                    expected_outcome=str(scenario.get("expected", scenario.get("expected_outcome", ""))),
+                    test_data=scenario.get("test_data", {}) if isinstance(scenario.get("test_data", {}), dict) else {},
+                ))
+                existing.add(name.lower())
+            run_data.flows = flows
+
+        # STEP 8: Test generation
         task = progress.add_task("[7/13] Generating test code...", total=None)
         try:
             from src.llm.ollama import OllamaClient
@@ -223,7 +279,7 @@ async def _full_run(
         progress.remove_task(task)
 
         # STEP 8: Execute tests
-        task = progress.add_task("[8/13] Running tests...", total=None)
+        task = progress.add_task("[9/14] Running tests...", total=None)
         execution_result = None
         if test_suite:
             try:
@@ -242,7 +298,7 @@ async def _full_run(
 
         # STEP 9: Accessibility audit
         if a11y and run_data.crawl_result:
-            task = progress.add_task("[9/13] Auditing accessibility...", total=None)
+            task = progress.add_task("[10/14] Auditing accessibility...", total=None)
             try:
                 auditor = AccessibilityAuditor()
                 a11y_report = await auditor.audit(
@@ -259,7 +315,7 @@ async def _full_run(
 
         # STEP 10: Visual diff
         if visual_diff and run_data.crawl_result:
-            task = progress.add_task("[10/13] Computing visual diffs...", total=None)
+            task = progress.add_task("[11/14] Computing visual diffs...", total=None)
             try:
                 differ = VisualDiffer(cli=cli)
                 before_map = await differ.capture_baseline(run_data.crawl_result.pages, run_dir)
@@ -276,7 +332,7 @@ async def _full_run(
 
         # STEP 11: Severity scoring
         if execution_result and execution_result.failed > 0:
-            task = progress.add_task("[11/13] Scoring failure severity...", total=None)
+            task = progress.add_task("[12/14] Scoring failure severity...", total=None)
             try:
                 from src.llm.ollama import OllamaClient
                 client = OllamaClient()
@@ -298,7 +354,7 @@ async def _full_run(
             progress.remove_task(task)
 
         # STEP 12: Generate reports
-        task = progress.add_task("[12/13] Generating reports...", total=None)
+        task = progress.add_task("[13/14] Generating reports...", total=None)
         run_data.finished_at = datetime.now(UTC)
         try:
             html_path = HTMLReporter().generate(run_data)
@@ -311,7 +367,7 @@ async def _full_run(
 
         # STEP 13: Trace viewer
         if interactive and execution_result and execution_result.failed > 0:
-            task = progress.add_task("[13/13] Opening trace viewer...", total=None)
+            task = progress.add_task("[14/14] Opening trace viewer...", total=None)
             failed_with_trace = [
                 t for t in execution_result.tests if t.status == "failed" and t.trace_path
             ]
@@ -364,6 +420,12 @@ def _print_summary(run_data: RunData, html_path: Path, json_path: Path) -> None:
     console.print()
     console.print(f"[bold green]✓ Report saved to:[/bold green] {html_path}")
     console.print(f"[bold green]✓ JSON saved to:[/bold green]   {json_path}")
+    excel_path = run_data.run_dir / "execution-report.xlsx"
+    pdf_path = run_data.run_dir / "final-report.pdf"
+    if excel_path.exists():
+        console.print(f"[bold green]✓ Excel saved to:[/bold green]  {excel_path}")
+    if pdf_path.exists():
+        console.print(f"[bold green]✓ PDF saved to:[/bold green]    {pdf_path}")
 
 
 @app.command()
