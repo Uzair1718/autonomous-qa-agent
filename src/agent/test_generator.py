@@ -203,7 +203,7 @@ class TestGenerator:
 
             except Exception as exc:
                 error_msg = str(exc)
-                logger.error("OpenAI call failed during test generation: %s", error_msg)
+                logger.error("Local LLM call failed during test generation: %s", error_msg)
                 generation_errors.append(error_msg)
                 break
 
