@@ -262,8 +262,8 @@ async def _full_run(
                 existing.add(name.lower())
             run_data.flows = flows
 
-        # STEP 8: Test generation
-        task = progress.add_task("[8/14] Generating test code...", total=None)
+                # STEP 9: Test generation
+        task = progress.add_task("[9/16] Generating test code...", total=None)
         try:
             from src.llm.ollama import OllamaClient
             client = OllamaClient()
@@ -272,7 +272,7 @@ async def _full_run(
             run_data.test_suite = test_suite
             progress.update(
                 task,
-                description=f"[8/14] Generated {test_suite.test_count} tests"
+                description=f"[9/16] Generated {test_suite.test_count} tests"
                 + (" ⚠ syntax errors" if not test_suite.syntax_valid else ""),
             )
         except Exception as exc:
@@ -280,8 +280,8 @@ async def _full_run(
             test_suite = None
         progress.remove_task(task)
 
-        # STEP 9: Execute tests
-        task = progress.add_task("[10/15] Running tests...", total=None)
+                # STEP 10: Execute tests
+        task = progress.add_task("[10/16] Running tests...", total=None)
         execution_result = None
         if test_suite:
             try:
@@ -290,7 +290,7 @@ async def _full_run(
                 run_data.execution_result = execution_result
                 progress.update(
                     task,
-                    description=f"[10/15] Tests: {execution_result.passed}/{execution_result.total} passed",
+                    description=f"[10/16] Tests: {execution_result.passed}/{execution_result.total} passed",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Test execution error: {exc}[/yellow]")
@@ -298,9 +298,9 @@ async def _full_run(
             progress.update(task, description="[10/15] Tests: skipped (no suite)")
         progress.remove_task(task)
 
-        # STEP 10: Accessibility audit
+                # STEP 11: Accessibility audit
         if a11y and run_data.crawl_result:
-            task = progress.add_task("[11/15] Auditing accessibility...", total=None)
+            task = progress.add_task("[11/16] Auditing accessibility...", total=None)
             try:
                 auditor = AccessibilityAuditor()
                 a11y_report = await auditor.audit(
@@ -309,13 +309,13 @@ async def _full_run(
                 run_data.a11y_report = a11y_report
                 progress.update(
                     task,
-                    description=f"[11/15] WCAG score: {a11y_report.wcag_score:.0f}/100 ({a11y_report.total_violations} violations)",
+                    description=f"[11/16] WCAG score: {a11y_report.wcag_score:.0f}/100 ({a11y_report.total_violations} violations)",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Accessibility audit failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 11: Design vs live semantic comparison
+                # STEP 12: Design vs live semantic comparison
         if design_context and run_data.crawl_result:
             try:
                 comparator = DesignComparator()
@@ -328,9 +328,9 @@ async def _full_run(
             except Exception as exc:
                 console.print(f"[yellow]⚠ Design comparison failed: {exc}[/yellow]")
 
-        # STEP 11: Visual diff
+                # STEP 13: Visual diff
         if visual_diff and run_data.crawl_result:
-            task = progress.add_task("[13/15] Computing visual diffs...", total=None)
+            task = progress.add_task("[13/16] Computing visual diffs...", total=None)
             try:
                 differ = VisualDiffer(cli=cli)
                 before_map = await differ.capture_baseline(run_data.crawl_result.pages, run_dir)
@@ -339,15 +339,15 @@ async def _full_run(
                 run_data.visual_diff_result = vdiff
                 progress.update(
                     task,
-                    description=f"[13/15] Visual diff: {vdiff.pages_changed}/{vdiff.total_pages} pages changed",
+                    description=f"[13/16] Visual diff: {vdiff.pages_changed}/{vdiff.total_pages} pages changed",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Visual diff failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 13: Severity scoring
+                # STEP 14: Severity scoring
         if execution_result and execution_result.failed > 0:
-            task = progress.add_task("[14/15] Scoring failure severity...", total=None)
+            task = progress.add_task("[14/16] Scoring failure severity...", total=None)
             try:
                 from src.llm.ollama import OllamaClient
                 client = OllamaClient()
@@ -363,24 +363,26 @@ async def _full_run(
                     sev = sf.severity.upper()
                     if sev in run_data.severity_breakdown:
                         run_data.severity_breakdown[sev] += 1
-                progress.update(task, description=f"[14/15] Severity scored: {len(scored)} failures")
+                progress.update(task, description=f"[14/16] Severity scored: {len(scored)} failures")
             except Exception as exc:
                 console.print(f"[yellow]⚠ Severity scoring failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 14: Generate reports
-        task = progress.add_task("[14/15] Generating reports...", total=None)
+                # STEP 15: Generate reports
+        task = progress.add_task("[15/16] Generating reports...", total=None)
         run_data.finished_at = datetime.now(UTC)
         try:
             html_path = HTMLReporter().generate(run_data)
             json_path = JSONReporter().generate(run_data)
-            progress.update(task, description="[12/13] Reports saved")
+            ExcelReporter().generate(run_data)
+            PDFReporter().generate(run_data)
+            progress.update(task, description="[15/16] HTML + JSON + Excel + PDF reports saved")
         except Exception as exc:
             console.print(f"[red]✗ Report generation failed: {exc}[/red]")
             raise typer.Exit(1) from exc
         progress.remove_task(task)
 
-        # STEP 15: Trace viewer
+                # STEP 16: Trace viewer
         if interactive and execution_result and execution_result.failed > 0:
             task = progress.add_task("[16/16] Opening trace viewer...", total=None)
             failed_with_trace = [
