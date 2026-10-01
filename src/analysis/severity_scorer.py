@@ -104,7 +104,7 @@ class SeverityScorer:
         generated_tests_path: Path | None = None,
     ) -> list[ScoredFailure]:
         """
-        Classify all test failures by severity in a single batched OpenAI call.
+        Classify all test failures by severity in a single batched local-LLM call.
 
         Args:
             execution_result: Full test execution result
@@ -180,7 +180,7 @@ class SeverityScorer:
             )
             return scored_failures
 
-        except (json.JSONDecodeError, ValueError, Exception) as exc:
+        except Exception as exc:
             logger.warning("Severity scoring failed, assigning MEDIUM to all: %s", exc)
             # Fallback: assign MEDIUM to all failures
             return [
