@@ -1,5 +1,5 @@
 """
-Test generation: sends user flows to OpenAI to generate executable pytest + Playwright code.
+Test generation: sends user flows to local LLM to generate executable pytest + Playwright code.
 Validates syntax via ast.parse() before saving.
 """
 
@@ -10,8 +10,9 @@ import json
 import logging
 from pathlib import Path
 
-from openai import AsyncOpenAI
+from typing import Any
 
+from src.llm.ollama import OllamaClient
 from src.models import GeneratedTestSuite, UserFlow
 
 logger = logging.getLogger(__name__)
@@ -90,16 +91,16 @@ def _extract_page_objects(code: str) -> list[str]:
 
 class TestGenerator:
     """
-    Generates executable pytest + Playwright test code from user flows via OpenAI.
+    Generates executable pytest + Playwright test code from user flows via Ollama/local LLM.
     Validates syntax with ast.parse() and retries once on syntax error.
     """
 
-    def __init__(self, client: AsyncOpenAI | None = None, model: str = "gpt-4o-mini") -> None:
-        self._client = client or AsyncOpenAI()
+    def __init__(self, client: Any | None = None, model: str = "qwen3:8b") -> None:
+        self._client = client or OllamaClient()
         self._model = model
 
     async def _call_openai(self, flows: list[UserFlow], base_url: str, retry_hint: str = "") -> str:
-        """Make a single OpenAI call to generate test code."""
+        """Make a single local LLM call to generate test code."""
         system_prompt = _load_system_prompt("generate_tests.md")
 
         flows_json = json.dumps([f.model_dump(mode="json") for f in flows], indent=2)
