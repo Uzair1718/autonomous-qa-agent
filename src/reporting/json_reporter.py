@@ -94,6 +94,11 @@ class JSONReporter:
                 "generated_tests": str(run_data.run_dir / "generated_tests.py"),
                 "har": str(run_data.run_dir / "traffic.har"),
                 "codegen_script": str(run_data.run_dir / "codegen_script.py"),
+                "excel": str(run_data.run_dir / "execution-report.xlsx"),
+                "pdf": str(run_data.run_dir / "final-report.pdf"),
+                "scenarios": str(run_data.run_dir / "qa_scenarios.json"),
+                "exploratory_findings": str(run_data.run_dir / "exploratory_findings.json"),
+                "design_comparison": str(run_data.run_dir / "design_comparison.json"),
             },
         }
 
