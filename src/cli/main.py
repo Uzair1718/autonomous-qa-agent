@@ -329,7 +329,7 @@ async def _full_run(
 
         # STEP 11: Visual diff
         if visual_diff and run_data.crawl_result:
-            task = progress.add_task("[11/14] Computing visual diffs...", total=None)
+            task = progress.add_task("[12/15] Computing visual diffs...", total=None)
             try:
                 differ = VisualDiffer(cli=cli)
                 before_map = await differ.capture_baseline(run_data.crawl_result.pages, run_dir)
@@ -338,15 +338,15 @@ async def _full_run(
                 run_data.visual_diff_result = vdiff
                 progress.update(
                     task,
-                    description=f"[11/14] Visual diff: {vdiff.pages_changed}/{vdiff.total_pages} pages changed",
+                    description=f"[12/15] Visual diff: {vdiff.pages_changed}/{vdiff.total_pages} pages changed",
                 )
             except Exception as exc:
                 console.print(f"[yellow]⚠ Visual diff failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 12: Severity scoring
+        # STEP 13: Severity scoring
         if execution_result and execution_result.failed > 0:
-            task = progress.add_task("[12/14] Scoring failure severity...", total=None)
+            task = progress.add_task("[13/15] Scoring failure severity...", total=None)
             try:
                 from src.llm.ollama import OllamaClient
                 client = OllamaClient()
@@ -362,13 +362,13 @@ async def _full_run(
                     sev = sf.severity.upper()
                     if sev in run_data.severity_breakdown:
                         run_data.severity_breakdown[sev] += 1
-                progress.update(task, description=f"[12/14] Severity scored: {len(scored)} failures")
+                progress.update(task, description=f"[13/15] Severity scored: {len(scored)} failures")
             except Exception as exc:
                 console.print(f"[yellow]⚠ Severity scoring failed: {exc}[/yellow]")
             progress.remove_task(task)
 
-        # STEP 13: Generate reports
-        task = progress.add_task("[13/14] Generating reports...", total=None)
+        # STEP 14: Generate reports
+        task = progress.add_task("[14/15] Generating reports...", total=None)
         run_data.finished_at = datetime.now(UTC)
         try:
             html_path = HTMLReporter().generate(run_data)
@@ -379,9 +379,9 @@ async def _full_run(
             raise typer.Exit(1) from exc
         progress.remove_task(task)
 
-        # STEP 14: Trace viewer
+        # STEP 15: Trace viewer
         if interactive and execution_result and execution_result.failed > 0:
-            task = progress.add_task("[14/14] Opening trace viewer...", total=None)
+            task = progress.add_task("[15/15] Opening trace viewer...", total=None)
             failed_with_trace = [
                 t for t in execution_result.tests if t.status == "failed" and t.trace_path
             ]
