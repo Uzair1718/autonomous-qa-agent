@@ -99,7 +99,7 @@ class TestGenerator:
         self._client = client or OllamaClient()
         self._model = model
 
-    async def _call_openai(self, flows: list[UserFlow], base_url: str, retry_hint: str = "") -> str:
+    async def _call_local_llm(self, flows: list[UserFlow], base_url: str, retry_hint: str = "") -> str:
         """Make a single local LLM call to generate test code."""
         system_prompt = _load_system_prompt("generate_tests.md")
 
@@ -109,6 +109,8 @@ class TestGenerator:
             f"Base URL: {base_url}\n"
             f"Number of flows: {len(flows)}\n\n"
             f"User Flows:\n```json\n{flows_json}\n```\n\n"
+            f"SRS / Requirements:\n```text\n{srs_context[:12000]}\n```\n\n"
+            f"UI Design (.pen):\n```text\n{design_context[:12000]}\n```\n\n"
             "Generate a single complete Python pytest file. "
             "Return ONLY the Python code, no markdown fences, no explanation."
         )
@@ -132,6 +134,8 @@ class TestGenerator:
         flows: list[UserFlow],
         base_url: str,
         run_dir: Path = Path("reports"),
+        srs_context: str = "",
+        design_context: str = "",
     ) -> GeneratedTestSuite:
         """
         Generate an executable pytest file from user flows.
@@ -172,6 +176,8 @@ class TestGenerator:
                     flows,
                     base_url,
                     retry_hint=generation_errors[-1] if generation_errors else "",
+                    srs_context=srs_context,
+                    design_context=design_context,
                 )
                 raw_code = _extract_python_code(raw)
 
