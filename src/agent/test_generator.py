@@ -99,7 +99,14 @@ class TestGenerator:
         self._client = client or OllamaClient()
         self._model = model
 
-    async def _call_local_llm(self, flows: list[UserFlow], base_url: str, retry_hint: str = "") -> str:
+    async def _call_local_llm(
+        self,
+        flows: list[UserFlow],
+        base_url: str,
+        retry_hint: str = "",
+        srs_context: str = "",
+        design_context: str = "",
+    ) -> str:
         """Make a single local LLM call to generate test code."""
         system_prompt = _load_system_prompt("generate_tests.md")
 
