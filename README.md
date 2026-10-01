@@ -36,7 +36,7 @@ No test scripts are written by humans. The agent does it all. The reasoning laye
 ## Quick Start
 
 ```bash
-git clone https://github.com/iklymchuk/autonomous-qa-agent.git
+git clone https://github.com/Uzair1718/autonomous-qa-agent.git
 cd autonomous-qa-agent
 
 make install
@@ -326,14 +326,14 @@ make coverage
 # Opens htmlcov/index.html  (target: 80%+)
 ```
 
-### Integration tests (requires `OPENAI_API_KEY`)
+### Integration tests (requires a running Ollama model)
 
 ```bash
 export OPENAI_API_KEY=sk-...
 make test-integration
 ```
 
-Integration tests are automatically skipped without a key:
+Integration tests require Ollama to be running locally:
 
 ```
 SKIP tests/integration/test_full_agent_run.py::test_full_agent_run_creates_reports
@@ -363,7 +363,7 @@ Coverage target: **80%+** (enforced in CI). All new modules require unit tests t
 
 **Built with ❤️ by Ivan Klymchuk**
 
-## Local LLM configuration
+## Local LLM configuration\n\nThe completed QA pipeline also exports Excel and PDF artifacts and accepts optional SRS and `.pen` design files. Test-user definitions can be supplied in `qa-users.json`; disposable email verification is supported through Mail.tm.
 
 The agent no longer requires an OpenAI API. It talks directly to Ollama over HTTP.
 
