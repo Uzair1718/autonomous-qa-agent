@@ -192,6 +192,24 @@ async def run_qa(payload: dict) -> Path:
     inferencer = FlowInferencer(client=client, model=config.model)
     run.flows = await inferencer.infer(combined, extra_context=context)
 
+    # Pytest hook captures a screenshot for every failed test when the page fixture is available.
+    (run_dir / "conftest.py").write_text(
+        "import pytest\n"
+        "@pytest.hookimpl(hookwrapper=True)\n"
+        "def pytest_runtest_makereport(item, call):\n"
+        "    outcome = yield\n"
+        "    report = outcome.get_result()\n"
+        "    if report.when == 'call' and report.failed:\n"
+        "        page = item.funcargs.get('page')\n"
+        "        if page is not None:\n"
+        "            path = item.config.rootpath / 'screenshots' / (item.name + '.png')\n"
+        "            path.parent.mkdir(parents=True, exist_ok=True)\n"
+        "            try:\n"
+        "                page.screenshot(path=str(path), full_page=True)\n"
+        "            except Exception:\n"
+        "                pass\n"
+    )
+
     generator = TestGenerator(client=client, model=config.model)
     suite = await generator.generate(
         run.flows,
