@@ -6,7 +6,7 @@ services:
     region: singapore
     branch: main
     autoDeploy: true
-    buildCommand: pip install . && playwright install --with-deps chromium
+    buildCommand: pip install . && playwright install chromium
     startCommand: uvicorn src.api_server:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /health
     envVars:
