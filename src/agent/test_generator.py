@@ -9,6 +9,7 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
+from src.llm_client import create_llm_client, llm_model
 from src.models import GeneratedTestSuite, UserFlow
 
 logger = logging.getLogger(__name__)
@@ -64,9 +65,9 @@ def _extract_page_objects(code: str) -> list[str]:
 
 
 class TestGenerator:
-    def __init__(self, client: AsyncOpenAI | None = None, model: str = "gpt-4o-mini") -> None:
-        self._client = client or AsyncOpenAI()
-        self._model = model
+    def __init__(self, client: AsyncOpenAI | None = None, model: str | None = None) -> None:
+        self._client = client or create_llm_client()
+        self._model = model or llm_model()
 
     async def _call(
         self,
