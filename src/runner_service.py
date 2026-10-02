@@ -21,6 +21,7 @@ from src.agent.flow_inferencer import FlowInferencer
 from src.agent.test_generator import TestGenerator
 from src.analysis.accessibility import AccessibilityAuditor
 from src.analysis.severity_scorer import SeverityScorer
+from src.analysis.pen_visual import run_pen_visual_audit
 from src.cli_bridge import PlaywrightCLI
 from src.models import AgentConfig, CrawlResult, RunData
 from src.reporting.html_reporter import HTMLReporter
@@ -188,6 +189,14 @@ async def run_qa(payload: dict) -> Path:
     )
     run.crawl_result = combined
 
+    # Real .pen render -> live browser screenshot comparison.
+    visual_results = await run_pen_visual_audit(
+        pen_path,
+        [page.url for page in combined.pages],
+        run_dir / "visual",
+        headless=config.headless,
+    )
+
     client = _client()
     inferencer = FlowInferencer(client=client, model=config.model)
     run.flows = await inferencer.infer(combined, extra_context=context)
@@ -258,6 +267,6 @@ async def run_qa(payload: dict) -> Path:
     run.finished_at = datetime.now(UTC)
     HTMLReporter().generate(run)
     JSONReporter().generate(run)
-    xlsx_path = build_xlsx(run, run_dir / "autonomous-qa-report.xlsx", srs_name, pen_name)
+    xlsx_path = build_xlsx(run, run_dir / "autonomous-qa-report.xlsx", srs_name, pen_name, visual_results)
     (run_dir / "run_context.txt").write_text(context)
     return xlsx_path
