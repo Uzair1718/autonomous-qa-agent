@@ -11,6 +11,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Disable the Playwright base-image entrypoint; Render must not run its browser installer
+# at container startup because this image already contains the Playwright browsers.
+ENTRYPOINT []
+
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY .claude ./.claude
