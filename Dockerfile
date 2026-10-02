@@ -4,7 +4,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-RUN npm install -g @open-pencil/cli
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs npm \
+    && npm install -g @open-pencil/cli \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
