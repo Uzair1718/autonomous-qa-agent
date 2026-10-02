@@ -1,3 +1,14 @@
-# Copy to .dev.vars for local development only.
+# QA runner authentication
 QA_RUNNER_API_KEY=replace-with-a-long-random-token
-OPENAI_API_KEY=replace-with-your-openai-or-compatible-api-key
+
+# LLM provider
+LLM_PROVIDER=openrouter
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=replace-with-your-openrouter-key
+LLM_MODEL=openrouter/free
+
+# For local Ollama instead:
+# LLM_PROVIDER=ollama
+# LLM_BASE_URL=http://host.docker.internal:11434/v1
+# LLM_API_KEY=ollama
+# LLM_MODEL=qwen3
