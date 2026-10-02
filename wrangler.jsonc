@@ -1,0 +1,42 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "autonomous-qa-runner",
+  "main": "cloudflare/index.ts",
+  "compatibility_date": "2026-10-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "secrets": {
+    "required": ["QA_RUNNER_API_KEY", "OPENAI_API_KEY"]
+  },
+  "vars": {
+    "QA_MODEL": "gpt-4o-mini",
+    "MAILTM_ENABLED": "true",
+    "QA_MAX_DEPTH": "3",
+    "HEADLESS": "true",
+    "QA_VISUAL_DIFF": "true",
+    "QA_LOG_LEVEL": "INFO"
+  },
+  "containers": [
+    {
+      "class_name": "QARunnerContainer",
+      "image": "./Dockerfile",
+      "max_instances": 2
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "QA_RUNNER",
+        "class_name": "QARunnerContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "new_sqlite_classes": ["QARunnerContainer"],
+      "tag": "v1"
+    }
+  ]
+}
