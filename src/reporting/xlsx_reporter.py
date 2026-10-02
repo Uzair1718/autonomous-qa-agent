@@ -28,7 +28,7 @@ def _header(ws: Any) -> None:
         cell.font = Font(bold=True, color="FFFFFF")
 
 
-def build_xlsx(run: RunData, path: Path, srs_name: str = "", pen_name: str = "") -> Path:
+def build_xlsx(run: RunData, path: Path, srs_name: str = "", pen_name: str = "", visual_results: list[dict[str, Any]] | None = None) -> Path:
     wb = Workbook()
     ws = wb.active
     ws.title = "Summary"
@@ -108,6 +108,23 @@ def build_xlsx(run: RunData, path: Path, srs_name: str = "", pen_name: str = "")
     req.append(["Pen Design", "Pen design was supplied to the runner; structural design summary is included in runner artifacts.", "AI flow planning context"])
     _header(req)
     _fit(req)
+
+    visual = wb.create_sheet("Pen Visual Comparison")
+    visual.append(["Screen", "URL", "Status", "Similarity %", "Changed Area %", "Design Screenshot", "Live Screenshot", "Diff Screenshot", "Reason"])
+    for item in visual_results or []:
+        visual.append([
+            item.get("screen", ""),
+            item.get("url", ""),
+            item.get("status", ""),
+            item.get("similarity", ""),
+            item.get("changed_ratio", ""),
+            item.get("design_screenshot", ""),
+            item.get("live_screenshot", ""),
+            item.get("diff_screenshot", ""),
+            item.get("reason", ""),
+        ])
+    _header(visual)
+    _fit(visual)
 
     evidence = wb.create_sheet("Evidence")
     evidence.append(["Artifact", "Path"])
