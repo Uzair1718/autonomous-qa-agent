@@ -13,9 +13,9 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 import httpx
-from openai import AsyncOpenAI
 
 from src.agent.crawler import SiteCrawler
+from src.llm_client import create_llm_client, llm_model
 from src.agent.executor import TestExecutor
 from src.agent.flow_inferencer import FlowInferencer
 from src.agent.test_generator import TestGenerator
@@ -79,13 +79,8 @@ def _pen_summary(path: Path) -> str:
         return f"Design file supplied: {path.name}; structural parsing unavailable."
 
 
-def _client() -> AsyncOpenAI:
-    key = os.getenv("OPENAI_API_KEY") or "local"
-    base_url = os.getenv("OPENAI_BASE_URL")
-    kwargs = {"api_key": key}
-    if base_url:
-        kwargs["base_url"] = base_url
-    return AsyncOpenAI(**kwargs)
+def _client():
+    return create_llm_client()
 
 
 async def _mailtm_account() -> tuple[str, str]:
@@ -160,7 +155,7 @@ async def run_qa(payload: dict) -> Path:
         interactive=False,
         run_id=run_id,
         reports_dir=reports_root,
-        model=os.getenv("QA_MODEL", "gpt-4o-mini"),
+        model=llm_model(),
         log_level=os.getenv("QA_LOG_LEVEL", "INFO"),
     )
     run = RunData(
