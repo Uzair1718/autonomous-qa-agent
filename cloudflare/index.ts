@@ -7,8 +7,10 @@ export class QARunnerContainer extends Container {
   enableInternet = true;
 
   envVars = {
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    QA_MODEL: env.QA_MODEL,
+    LLM_PROVIDER: env.LLM_PROVIDER,
+    LLM_BASE_URL: env.LLM_BASE_URL,
+    LLM_API_KEY: env.LLM_API_KEY,
+    LLM_MODEL: env.LLM_MODEL,
     MAILTM_ENABLED: env.MAILTM_ENABLED,
     QA_MAX_DEPTH: env.QA_MAX_DEPTH,
     HEADLESS: env.HEADLESS,
@@ -17,8 +19,8 @@ export class QARunnerContainer extends Container {
   };
 
   async fetch(request: Request): Promise<Response> {
-    const apiKey = request.headers.get("authorization");
-    if (apiKey !== `Bearer ${env.QA_RUNNER_API_KEY}`) {
+    const authorization = request.headers.get("authorization");
+    if (authorization !== `Bearer ${env.QA_RUNNER_API_KEY}`) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
     return this.containerFetch(request);
@@ -28,19 +30,12 @@ export class QARunnerContainer extends Container {
 export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-
     if (url.pathname === "/health") {
-      return Response.json({
-        status: "ok",
-        service: "autonomous-qa-runner",
-      });
+      return Response.json({ status: "ok", service: "autonomous-qa-runner" });
     }
-
     if (!["POST", "GET", "OPTIONS"].includes(request.method)) {
       return new Response("Method Not Allowed", { status: 405 });
     }
-
-    const container = getContainer(env.QA_RUNNER);
-    return container.fetch(request);
+    return getContainer(env.QA_RUNNER).fetch(request);
   },
 };
